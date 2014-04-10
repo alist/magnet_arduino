@@ -24,7 +24,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXELS, PIN, NEO_GRB + NEO_KHZ800);
 // Serial object to become available, as (obviously) it won't.
 // (Not connected to a USB port, so it's obviously not there, right?)
 
-#define DEBUG
+// #define DEBUG
 
 // ================================================================
 // BLE STATE TRACKING (UNIVERSAL TO JUST ABOUT ANY BLE PROJECT)
@@ -188,8 +188,8 @@ void setup() {
   writeRegister(DURATION, 0x10);
   
   //100ms Latency before the second tap can occur.
-  writeRegister(LATENT, 0x50);
-  writeRegister(WINDOW, 0xFF);
+  writeRegister(LATENT, 0x00); //0x50 was
+  writeRegister(WINDOW, 0x00); //0xFF
   
   //Enable the Single and Double Taps.
   writeRegister(INT_ENABLE, 0xE0);  
@@ -200,17 +200,20 @@ void setup() {
 
   //Create an interrupt that will trigger when a tap is detected.
   debugLog("pre");
-  // attachInterrupt(0, tap, CHANGE);
+  attachInterrupt(1, tap, CHANGE);
   debugLog("post");
 }
 
 
 int ledDemoPhase =0; 
+int lightupForTap = 0;
 unsigned long lastLightupTimeMillis = 0;
 unsigned long fastWipeUpdateInterval = 100;//millis
 unsigned long slowWipeUpdateInterval = 175;//millis
 unsigned long rainbowUpdateInterval = 40;//millis
 unsigned long lastDataAcqMillis = 0;
+unsigned long tapWipeUpdateInterval = 20;//millis
+
 
 int wipeCurrentPixel = 0;
 int rainbowCycleNumber = 0;
@@ -242,8 +245,20 @@ void loop() {
       }
   }
 
+  if (lightupForTap > 0){
 
-  if (ledDemoPhase == 0 && (currentMillis - lastLightupTimeMillis ) > fastWipeUpdateInterval){
+    if ((currentMillis - lastLightupTimeMillis ) > tapWipeUpdateInterval){
+      colorWipe(strip.Color(255, 255, 255), wipeCurrentPixel); // Green
+      lastLightupTimeMillis = currentMillis;
+
+      wipeCurrentPixel++;
+    }
+
+    if (wipeCurrentPixel >= PIXELS){
+      lightupForTap--;
+      wipeCurrentPixel = 0;
+    }
+  }else if (ledDemoPhase == 0 && (currentMillis - lastLightupTimeMillis ) > fastWipeUpdateInterval){
     colorWipe(strip.Color(0, 255, 0), wipeCurrentPixel); // Green
     lastLightupTimeMillis = currentMillis;
 
@@ -315,38 +330,40 @@ void loop() {
   }
 
 
+
   ///accel
-  readRegister(DATAX0, 6, values);
-
-  //The ADXL345 gives 10-bit acceleration values, but they are stored as bytes (8-bits). To get the full value, two bytes must be combined for each axis.
-  //The X value is stored in values[0] and values[1].
-  x = ((int)values[1]<<8)|(int)values[0];
-  //The Y value is stored in values[2] and values[3].
-  y = ((int)values[3]<<8)|(int)values[2];
-  //The Z value is stored in values[4] and values[5].
-  z = ((int)values[5]<<8)|(int)values[4];
-  
-  //Convert the accelerometer value to G's. 
-  //With 10 bits measuring over a +/-4g range we can find how to convert by using the equation:
-  // Gs = Measurement Value * (G-range/(2^10)) or Gs = Measurement Value * (8/1024)
-  xg = x * 0.0078;
-  yg = y * 0.0078;
-  zg = z * 0.0078;
-  
   if ((currentMillis - lastDataAcqMillis ) > 100){
-    Serial.print((float)xg,2);
-    Serial.print("g,");
-    Serial.print((float)yg,2);
-    Serial.print("g,");
-    Serial.print((float)zg,2);
-    Serial.println("g");
-
+    readRegister(DATAX0, 6, values);
     lastDataAcqMillis = currentMillis;
-  }
+
+    //The ADXL345 gives 10-bit acceleration values, but they are stored as bytes (8-bits). To get the full value, two bytes must be combined for each axis.
+    //The X value is stored in values[0] and values[1].
+    x = ((int)values[1]<<8)|(int)values[0];
+    //The Y value is stored in values[2] and values[3].
+    y = ((int)values[3]<<8)|(int)values[2];
+    //The Z value is stored in values[4] and values[5].
+    z = ((int)values[5]<<8)|(int)values[4];
+    
+    //Convert the accelerometer value to G's. 
+    //With 10 bits measuring over a +/-4g range we can find how to convert by using the equation:
+    // Gs = Measurement Value * (G-range/(2^10)) or Gs = Measurement Value * (8/1024)
+    xg = x * 0.0078;
+    yg = y * 0.0078;
+    zg = z * 0.0078;
+    
+      Serial.print((float)xg,2);
+      Serial.print("g,");
+      Serial.print((float)yg,2);
+      Serial.print("g,");
+      Serial.print((float)zg,2);
+      Serial.println("g");
+    }
 
   if(tapType > 0)
   {
     if(tapType == 1){
+      lightupForTap++;
+
       Serial.println("SINGLE");
       Serial.print(x);
       Serial.print(',');
@@ -363,10 +380,8 @@ void loop() {
       Serial.print((float)zg,2);
       Serial.println("g");
     }
-    detachInterrupt(0);
-    delay(500);
-    attachInterrupt(0, tap, RISING);
-    // intType=0;    
+    attachInterrupt(1, tap, CHANGE);
+    tapType=0;    
   }
 
 }
@@ -697,6 +712,7 @@ void readRegister(char registerAddress, int numBytes, char * values){
 }
 
 void tap(void){
+  // detachInterrupt(1);
   //Clear the interrupts on the ADXL345
   debugLog("tapped!");
   readRegister(INT_SOURCE, 1, values); 
