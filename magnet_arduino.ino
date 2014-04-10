@@ -3,7 +3,7 @@
 #include <Adafruit_NeoPixel.h>
 
 
-#define PIN 8
+#define PIN 12
 #define PIXELS 6
 
 // Parameter 1 = number of pixels in strip
@@ -67,9 +67,6 @@ BGLib ble113((HardwareSerial *) &bleSerialPort, 0, 1);
  * with the FemtoduinoBLE, revision 7 or higher.
  */
 void setup() {
-  strip.begin();
-  strip.show(); // Initialize all pixels to 'off'
-
   // Let's setup our status LED.
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
@@ -117,10 +114,23 @@ void setup() {
   digitalWrite(BLE_RESET_PIN, LOW);
   delay(5); // wait 5ms
   digitalWrite(BLE_RESET_PIN, HIGH);
-  
+
+  strip.begin();
+  // strip.show(); // Initialize all pixels to 'off'
 }
 
+
+int ledDemoPhase =0; 
+unsigned long lastLightupTimeMillis = 0;
+unsigned long fastWipeUpdateInterval = 100;//millis
+unsigned long slowWipeUpdateInterval = 175;//millis
+unsigned long rainbowUpdateInterval = 40;//millis
+int wipeCurrentPixel = 0;
+int rainbowCycleNumber = 0;
+
 void loop() {
+  unsigned long currentMillis = millis();
+
   // Keep polling for new data from BLE
   ble113.checkActivity();
   
@@ -146,50 +156,94 @@ void loop() {
   }
 
 
+  if (ledDemoPhase == 0 && (currentMillis - lastLightupTimeMillis ) > fastWipeUpdateInterval){
+    colorWipe(strip.Color(0, 255, 0), wipeCurrentPixel); // Green
+    lastLightupTimeMillis = currentMillis;
 
-  colorWipe(strip.Color(0, 255, 0), 100); // Green
-  rainbow(40);
-  colorWipe(strip.Color(255, 0, 0), 175); // Red
-  colorWipe(strip.Color(0, 255, 0), 100); // Green
-  rainbow(40);
-  colorWipe(strip.Color(0, 0, 255), 175); // Blue
-  // rainbowCycle(5);
+    wipeCurrentPixel++;
+
+    if (wipeCurrentPixel >= PIXELS){
+      ledDemoPhase++;
+      wipeCurrentPixel = 0;
+    }
+
+  }else if (ledDemoPhase == 1 && (currentMillis - lastLightupTimeMillis ) > rainbowUpdateInterval){
+    rainbow(rainbowCycleNumber);
+    lastLightupTimeMillis = currentMillis;
+
+    rainbowCycleNumber++;
+
+    if (rainbowCycleNumber >= 255){
+      ledDemoPhase++;
+      rainbowCycleNumber = 0;
+    }
+
+  }else if (ledDemoPhase == 2 && (currentMillis - lastLightupTimeMillis ) > slowWipeUpdateInterval){
+    colorWipe(strip.Color(255, 0, 0), wipeCurrentPixel); // red
+    lastLightupTimeMillis = currentMillis;
+
+    wipeCurrentPixel++;
+
+    if (wipeCurrentPixel >= PIXELS){
+      ledDemoPhase++;
+      wipeCurrentPixel = 0;
+    }
+  }else if (ledDemoPhase == 3 && (currentMillis - lastLightupTimeMillis ) > fastWipeUpdateInterval){
+    colorWipe(strip.Color(0, 255, 0), wipeCurrentPixel); // Green
+    lastLightupTimeMillis = currentMillis;
+
+    wipeCurrentPixel++;
+
+    if (wipeCurrentPixel >= PIXELS){
+      ledDemoPhase++;
+      wipeCurrentPixel = 0;
+    }
+
+  }else if (ledDemoPhase == 4 && (currentMillis - lastLightupTimeMillis ) > rainbowUpdateInterval){
+    rainbow(rainbowCycleNumber);
+    lastLightupTimeMillis = currentMillis;
+
+    rainbowCycleNumber++;
+
+    if (rainbowCycleNumber >= 255){
+      ledDemoPhase++;
+      rainbowCycleNumber = 0;
+    }
+
+  }else if (ledDemoPhase == 5 && (currentMillis - lastLightupTimeMillis ) > slowWipeUpdateInterval){
+    colorWipe(strip.Color(0, 0, 255), wipeCurrentPixel); // blue
+    lastLightupTimeMillis = currentMillis;
+
+    wipeCurrentPixel++;
+
+    if (wipeCurrentPixel >= PIXELS){
+      ledDemoPhase++;
+      wipeCurrentPixel = 0;
+    }
+
+  }
+
+  if (ledDemoPhase > 5){
+    ledDemoPhase = 0;
+  }
 }
 
 
 //neoPixels
 // Fill the dots one after the other with a color
-void colorWipe(uint32_t c, uint8_t wait) {
-  for(uint16_t i=0; i<strip.numPixels(); i++) {
-      strip.setPixelColor(i, c);
+void colorWipe(uint32_t c, uint8_t pixel) {
+      strip.setPixelColor(pixel, c);
       strip.show();
-      delay(wait);
-  }
 }
 
-void rainbow(uint8_t wait) {
-  uint16_t i, j;
+void rainbow(uint8_t rainbowCycleNumber) {
+  uint16_t i;
 
-  for(j=0; j<256; j++) {
-    for(i=0; i<strip.numPixels(); i++) {
-      strip.setPixelColor(i, Wheel((i+j) & 255));
-    }
-    strip.show();
-    delay(wait);
+  for(i=0; i<strip.numPixels(); i++) {
+    strip.setPixelColor(i, Wheel((i+rainbowCycleNumber) & 255));
   }
-}
+  strip.show();
 
-// Slightly different, this makes the rainbow equally distributed throughout
-void rainbowCycle(uint8_t wait) {
-  uint16_t i, j;
-
-  for(j=0; j<256*5; j++) { // 5 cycles of all colors on wheel
-    for(i=0; i< strip.numPixels(); i++) {
-      strip.setPixelColor(i, Wheel(((i * 256 / strip.numPixels()) + j) & 255));
-    }
-    strip.show();
-    delay(wait);
-  }
 }
 
 // Input a value 0 to 255 to get a color value.
@@ -205,6 +259,18 @@ uint32_t Wheel(byte WheelPos) {
    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
   }
 }
+
+void debugLog(String logPiece){\
+  //milisecondsSinceProgramStart: "log piece"
+  //nice logging, printing to com port attached to computer
+  const String seperator = String(": ");
+  String toSend = String(millis(), DEC) + seperator + logPiece;
+  
+  
+  //debug in the way most preferred 
+  Serial.println(toSend);
+} 
+
 
 
 // BLE
@@ -268,7 +334,7 @@ void femtoSystemBoot(const ble_msg_system_boot_evt_t *msg) {
     BGLIB_GAP_AD_TYPE_LOCALNAME_COMPLETE,       // Field type
     
     // Set the name to "FemtoduinoBLE 00:00:00"
-       'F', 'e', 'm', 't', 'o', 'd', 'u', 'i', 'n', 'o', 'B', 'L', 'E', ' ', '0', '0', ':', '0', '0', ':', '0', '0'
+       'F', 'e', 'm', 't', 'o', 'd', 'u', 'i', 'n', 'o', 'B', 'L', 'X', ' ', '0', '0', ':', '0', '0', ':', '0', '0'
     //  1    2    3    4    5    6    7    8    9    10   11   12   13  14   15   16   17   18   19   20   21   22
   };
   
