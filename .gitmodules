@@ -1,0 +1,6 @@
+[submodule "libraries/bglib"]
+	path = libraries/bglib
+	url = git@github.com:alist/bglib.git
+[submodule "examples/femtoduino-ble"]
+	path = examples/femtoduino-ble
+	url = git@github.com:alist/femtoduino-ble.git
