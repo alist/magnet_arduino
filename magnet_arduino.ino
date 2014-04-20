@@ -24,7 +24,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXELS, PIN, NEO_GRB + NEO_KHZ800);
 // Serial object to become available, as (obviously) it won't.
 // (Not connected to a USB port, so it's obviously not there, right?)
 
-// #define DEBUG
+#define DEBUG
 
 // ================================================================
 // BLE STATE TRACKING (UNIVERSAL TO JUST ABOUT ANY BLE PROJECT)
@@ -147,7 +147,8 @@ void setup() {
   ble113.ble_evt_connection_status = femtoConnectionStatus;
   ble113.ble_evt_connection_disconnected = femtoConnectionDisconnect;
   ble113.ble_evt_attributes_value = femtoAttributesValue;
-  
+
+
 #ifdef DEBUG
   Serial.begin(38400);
   while(!Serial);
@@ -178,7 +179,7 @@ void setup() {
   //Put the ADXL345 into +/- 4G range by writing the value 0x01 to the DATA_FORMAT register.
   writeRegister(DATA_FORMAT, 0x01);
 
-  //Send the Tap and Double Tap Interrupts to INT1 pin
+  //Send the Tap and Double Tap Interrupts to INT1 pin //I beleive this disable doubles
   writeRegister(INT_MAP, 0x9F);
   //Look for taps on the Z axis only.
   writeRegister(TAP_AXES, 0x01);
@@ -191,17 +192,17 @@ void setup() {
   writeRegister(LATENT, 0x00); //0x50 was
   writeRegister(WINDOW, 0x00); //0xFF
   
-  //Enable the Single and Double Taps.
-  writeRegister(INT_ENABLE, 0xE0);  
+  //Enable the Single and NOT Double Taps., 0b11000000 in hex, 0b11100000 for double
+  writeRegister(INT_ENABLE, 0xC0);  
   
   //Put the ADXL345 into Measurement Mode by writing 0x08 to the POWER_CTL register.
   writeRegister(POWER_CTL, 0x08);  //Measurement mode
   readRegister(INT_SOURCE, 1, values); //Clear the interrupts from the INT_SOURCE register.
 
   //Create an interrupt that will trigger when a tap is detected.
-  debugLog("pre");
+  // debugLog("pre");
   attachInterrupt(1, tap, CHANGE);
-  debugLog("post");
+  // debugLog("post");
 }
 
 
@@ -332,7 +333,7 @@ void loop() {
 
 
   ///accel
-  if ((currentMillis - lastDataAcqMillis ) > 100){
+  if ((currentMillis - lastDataAcqMillis ) > 50){
     readRegister(DATAX0, 6, values);
     lastDataAcqMillis = currentMillis;
 
@@ -349,15 +350,24 @@ void loop() {
     // Gs = Measurement Value * (G-range/(2^10)) or Gs = Measurement Value * (8/1024)
     xg = x * 0.0078;
     yg = y * 0.0078;
+    
+    double oldZg = zg;
     zg = z * 0.0078;
     
+    if (abs(oldZg-zg) > .02){
+
       Serial.print((float)xg,2);
       Serial.print("g,");
       Serial.print((float)yg,2);
       Serial.print("g,");
       Serial.print((float)zg,2);
       Serial.println("g");
+
+      uint8_t zgInt = int(zg*100) + 100;
+      ble113.ble_cmd_attributes_write(ble_bonding,0,1,&zgInt);
+      //ble_bonding
     }
+  }
 
   if(tapType > 0)
   {
